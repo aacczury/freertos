@@ -106,6 +106,40 @@ void command_prompt(void *pvParameters)
 
 }
 
+void record_sysinfo(void *pvParameters){
+	const portTickType xDelay = 100000 / 100;
+
+	char buf[128];
+	char *argv[20];
+	char output[512] = {0};
+
+	memcpy(buf, "host_write -w output/syslog Name\tState\tPriority\tStack\tNum\n", 59);
+
+	int n=parse_command(buf, argv);
+	cmdfunc *fptr=do_command(argv[0]);
+	if(fptr!=NULL)
+		fptr(n, argv);
+	else
+		fio_printf(2, "\r\n\"%s\" command not found.\r\n", argv[0]);
+	while(1){
+		memset(buf, 0, 128);
+		vTaskList(buf);
+
+		memcpy(output, "host_write -a output/syslog ", 29);
+		strcat(output, (char *)(buf + 2));
+
+		n=parse_command(output, argv);
+		fptr=do_command(argv[0]);
+		if(fptr!=NULL)
+			fptr(n, argv);
+		else
+			fio_printf(2, "\r\n\"%s\" command not found.\r\n", argv[0]);
+
+
+		vTaskDelay(xDelay);
+	}
+}
+
 int main()
 {
 	init_rs232();
@@ -127,6 +161,11 @@ int main()
 	/* Create a task to output text read from romfs. */
 	xTaskCreate(command_prompt,
 	            (signed portCHAR *) "Command Prompt",
+	            512 /* stack size */, NULL, tskIDLE_PRIORITY + 2, NULL);
+
+	/* Create a task to record system info to sysinfo */
+	xTaskCreate(record_sysinfo,
+	            (signed portCHAR *) "Record SysInfo",
 	            512 /* stack size */, NULL, tskIDLE_PRIORITY + 2, NULL);
 
 	/* Start running the tasks. */
